@@ -7,6 +7,7 @@ Le widget peut lire une table liée/consolidée pour construire le Gantt, puis �
 ## Fonctionnalités principales
 
 - Affichage Gantt hiérarchique `Niveau 1 → Niveau 2 → Niveau 3`.
+- Prise en charge des colonnes de références multiples (`Reference List`) pour les niveaux 2 et 3 : chaque référence devient une branche du Gantt.
 - Regroupement automatique des doublons hiérarchiques : un même parent n’apparaît qu’une fois et rassemble tous ses enfants associés.
 - Champs essentiels par niveau : nom, date de début, date de fin, statut, responsable, avancement.
 - Niveau 1 obligatoire ; niveaux 2 et 3 facultatifs.
@@ -33,7 +34,7 @@ Mappez au minimum :
 
 Puis, selon vos besoins :
 
-- `levelNName` : nom du niveau N (`N = 1, 2, 3`).
+- `levelNName` : nom du niveau N (`N = 1, 2, 3`). Pour les niveaux 2 et 3, ce champ peut être une référence simple ou une référence multiple (`Reference List`) ; le widget crée alors un nœud pour chaque référence.
 - `levelNStart` : date de début affichée.
 - `levelNEnd` : date de fin affichée.
 - `levelNStatus` : statut.
@@ -62,7 +63,7 @@ const tableHandlers = {
 
 Dans le widget, cette logique devient déclarative dans les colonnes mappées : une barre sait de quelle table source elle vient, quelle ligne source modifier, et quelles colonnes source mettre à jour.
 
-Si ces colonnes source ne sont pas fournies, le widget conserve un fallback et tente d’écrire dans la table sélectionnée via le mapping Grist.
+Si ces colonnes source ne sont pas fournies, le widget conserve un fallback et tente d’écrire dans la table sélectionnée via le mapping Grist. Quand `level2Name` ou `level3Name` est une référence multiple, l’id de ligne de chaque référence est utilisé comme source si aucun `levelNSourceRowId` explicite n’est disponible.
 
 ## Installation / utilisation dans Grist
 

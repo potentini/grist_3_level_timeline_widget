@@ -317,10 +317,38 @@
     return !!(sourceEntries?.rowId?.alias && sourceEntries.rowId.alias.startsWith(`level${level}`));
   }
 
+  function isGristList(value) {
+    return Array.isArray(value) && value[0] === "L";
+  }
+
+  function looksLikeSingleRefTuple(value) {
+    return Array.isArray(value) && value.length >= 1 && value.length <= 3 && !isGristList(value) && !Array.isArray(value[0]) &&
+      !(typeof value[0] === "object" && value[0] !== null) &&
+      (value.length === 1 || value[1] == null || typeof value[1] === "string") &&
+      (value.length < 3 || value[2] == null || typeof value[2] === "string");
+  }
+
+  function splitListValue(value) {
+    if (!Array.isArray(value)) return [value];
+    if (!value.length) return [];
+    if (isGristList(value)) return value.slice(1);
+    if (looksLikeSingleRefTuple(value)) return [value];
+    if (Array.isArray(value[0]) || (typeof value[0] === "object" && value[0] !== null)) return value;
+    return value;
+  }
+
+  function valueAtListIndex(value, index, listLength) {
+    if (value == null || listLength <= 1) return value;
+    const values = splitListValue(value);
+    if (values.length === listLength) return values[index];
+    return value;
+  }
+
   function parseRefValue(value) {
     if (value == null) return { label: "", rowId: null, tableId: null };
     if (Array.isArray(value)) {
       if (!value.length) return { label: "", rowId: null, tableId: null };
+      if (isGristList(value)) return parseRefValue(value[1]);
       if (Array.isArray(value[0]) || (typeof value[0] === "object" && value[0] !== null)) return parseRefValue(value[0]);
       const rowId = Number(value[0]);
       return {
@@ -335,7 +363,11 @@
       const tableId = value.tableId ?? value.table ?? value.tableName ?? null;
       return { label: String(label || ""), rowId: Number.isFinite(rowId) ? rowId : null, tableId: tableId ? String(tableId) : null };
     }
-    return { label: String(value), rowId: null, tableId: null };
+    return { label: String(value), rowId: Number.isFinite(Number(value)) ? Number(value) : null, tableId: null };
+  }
+
+  function parseRefValues(value) {
+    return splitListValue(value).map(parseRefValue).filter((ref) => (ref.label || "").trim());
   }
 
   function parseProgress(value) {
@@ -497,21 +529,21 @@
       if (!mapped) continue;
 
       const displayRowId = raw.id || raw.Id || raw.ID;
-      let parentId = null;
-      const pathLabels = [];
 
-      for (const levelInfo of LEVELS) {
+      function addLevel(levelIndex, parentId, pathLabels) {
+        if (levelIndex >= LEVELS.length) return;
+
+        const levelInfo = LEVELS[levelIndex];
         const level = levelInfo.level;
         const cfg = LEVEL_ALIASES[level];
         const nameValue = mappedValue(mapped, cfg.name);
-        const ref = parseRefValue(nameValue);
-        const label = (ref.label || "").trim();
-        if (!label) {
-          if (levelInfo.required) break;
-          continue;
+        const refs = parseRefValues(nameValue);
+
+        if (!refs.length) {
+          if (!levelInfo.required) addLevel(levelIndex + 1, parentId, pathLabels);
+          return;
         }
 
-        pathLabels.push(label);
         const sourceEntries = {
           tableId: mappedEntry(mapped, cfg.sourceTable),
           rowId: mappedEntry(mapped, cfg.sourceRow),
@@ -519,46 +551,59 @@
           endCol: mappedEntry(mapped, cfg.sourceEndCol),
           progressCol: mappedEntry(mapped, cfg.sourceProgressCol)
         };
-        const source = {
-          tableId: coalesce(sourceEntries.tableId.value, ref.tableId),
-          rowId: Number(coalesce(sourceEntries.rowId.value, ref.rowId)) || null,
-          startCol: sourceEntries.startCol.value,
-          endCol: sourceEntries.endCol.value,
-          progressCol: sourceEntries.progressCol.value
-        };
-        const nodeId = makeNodeId(level, pathLabels, ref, source, sourceEntries);
 
-        if (!nodes.has(nodeId)) {
-          const node = createEmptyNode({
-            id: nodeId,
-            level,
-            label,
-            parentId,
+        refs.forEach((ref, refIndex) => {
+          const label = (ref.label || "").trim();
+          if (!label) return;
+
+          const branchPathLabels = [...pathLabels, label];
+          const sourceRowValues = splitListValue(sourceEntries.rowId.value);
+          const rowIdValue = refs.length <= 1 || sourceRowValues.length === refs.length
+            ? valueAtListIndex(sourceEntries.rowId.value, refIndex, refs.length)
+            : null;
+          const source = {
+            tableId: coalesce(sourceEntries.tableId.value, ref.tableId),
+            rowId: Number(coalesce(rowIdValue, ref.rowId)) || null,
+            startCol: sourceEntries.startCol.value,
+            endCol: sourceEntries.endCol.value,
+            progressCol: sourceEntries.progressCol.value
+          };
+          const nodeId = makeNodeId(level, branchPathLabels, ref, source, sourceEntries);
+
+          if (!nodes.has(nodeId)) {
+            const node = createEmptyNode({
+              id: nodeId,
+              level,
+              label,
+              parentId,
+              sourceIndex: idx,
+              sourceRowId: displayRowId,
+              source
+            });
+            nodes.set(nodeId, node);
+            if (parentId && nodes.has(parentId)) nodes.get(parentId).children.push(node);
+            else roots.push(node);
+          }
+
+          const startDate = normalizeDate(valueAtListIndex(mappedValue(mapped, cfg.start), refIndex, refs.length));
+          const endDate = normalizeDate(valueAtListIndex(mappedValue(mapped, cfg.end), refIndex, refs.length));
+          mergeNodeData(nodes.get(nodeId), {
+            displayRowId,
             sourceIndex: idx,
-            sourceRowId: displayRowId,
-            source
+            startDate,
+            endDate,
+            status: String(valueAtListIndex(mappedValue(mapped, cfg.status), refIndex, refs.length) || ""),
+            responsible: String(valueAtListIndex(mappedValue(mapped, cfg.responsible), refIndex, refs.length) || ""),
+            progress: parseProgress(valueAtListIndex(mappedValue(mapped, cfg.progress), refIndex, refs.length)),
+            source,
+            fallbackAliases: { start: cfg.start[0], end: cfg.end[0], progress: cfg.progress[0] }
           });
-          nodes.set(nodeId, node);
-          if (parentId && nodes.has(parentId)) nodes.get(parentId).children.push(node);
-          else roots.push(node);
-        }
 
-        const startDate = normalizeDate(mappedValue(mapped, cfg.start));
-        const endDate = normalizeDate(mappedValue(mapped, cfg.end));
-        mergeNodeData(nodes.get(nodeId), {
-          displayRowId,
-          sourceIndex: idx,
-          startDate,
-          endDate,
-          status: String(mappedValue(mapped, cfg.status) || ""),
-          responsible: String(mappedValue(mapped, cfg.responsible) || ""),
-          progress: parseProgress(mappedValue(mapped, cfg.progress)),
-          source,
-          fallbackAliases: { start: cfg.start[0], end: cfg.end[0], progress: cfg.progress[0] }
+          addLevel(levelIndex + 1, nodeId, branchPathLabels);
         });
-
-        parentId = nodeId;
       }
+
+      addLevel(0, null, []);
     }
 
     function finalize(node) {
@@ -1344,7 +1389,8 @@
   if (toggleMappingPanelBtn && mappingPanelEl) {
     toggleMappingPanelBtn.textContent = "Aide mapping";
     mappingPanelEl.innerHTML = `
-      <div><strong>Mapping multi-niveau</strong> : mappez au minimum <code>level1Name</code>. Les niveaux 2 et 3 sont optionnels.</div>
+      <div><strong>Mapping multi-niveau</strong> : mappez au minimum <code>level1Name</code>. Les niveaux 2 et 3 sont optionnels et peuvent aussi être des colonnes <em>Reference List</em>.</div>
+      <div>Si <code>level2Name</code> ou <code>level3Name</code> contient plusieurs références, le widget crée une branche pour chaque référence au lieu de ne prendre que la première.</div>
       <div>Pour écrire dans les vraies tables sources, exposez pour chaque niveau : <code>levelNSourceTableId</code>, <code>levelNSourceRowId</code>, <code>levelNStartColId</code>, <code>levelNEndColId</code> (et éventuellement <code>levelNProgressColId</code>).</div>
       <div>Exemple : Projets → Tâches → Sous-tâches avec <code>level1SourceTableId=Projets</code>, <code>level2SourceTableId=Taches</code>, <code>level3SourceTableId=Sous_taches</code>.</div>
     `;
