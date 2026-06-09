@@ -119,7 +119,6 @@
   const dragBubbleEl = document.getElementById("dragBubble");
   const taskCountEl = document.getElementById("taskCount");
   const expandAllBtn = document.getElementById("expandAllBtn");
-  const collapseAllBtn = document.getElementById("collapseAllBtn");
   const prevBtn = document.getElementById("prevBtn");
   const nextBtn = document.getElementById("nextBtn");
   const todayBtn = document.getElementById("todayBtn");
@@ -130,6 +129,7 @@
   const ganttContainer = document.getElementById("ganttContainer");
   const toggleMappingPanelBtn = document.getElementById("toggleMappingPanelBtn");
   const mappingPanelEl = document.getElementById("mappingPanel");
+  const debugPanelEl = document.getElementById("debugPanel");
 
   const dragState = {
     active: false,
@@ -1314,8 +1314,23 @@
   function refreshTableInfo() {
     const mappedCols = latestMappings && latestMappings.columns ? Object.keys(latestMappings.columns).length : latestMappings ? Object.keys(latestMappings).length : 0;
     const routed = allRecords.filter((n) => n.source.tableId && n.source.rowId != null).length;
-    mappingInfoEl.textContent = `Mapping actif : ${currentMappingsOk ? "oui" : "non"}, table liée = ${currentTableId || "inconnue"}, mappings reçus = ${mappedCols}, niveaux = 1/2/3, écritures routées = ${routed}/${allRecords.length}`;
+    if (mappingInfoEl) mappingInfoEl.textContent = `Mapping actif : ${currentMappingsOk ? "oui" : "non"}, table liée = ${currentTableId || "inconnue"}, mappings reçus = ${mappedCols}, niveaux = 1/2/3, écritures routées = ${routed}/${allRecords.length}`;
     setDebugSyncMode(latestWriteSummary);
+  }
+
+  function hasCollapsibleNodes() {
+    return allRecords.some((n) => n.children.length);
+  }
+
+  function areAllCollapsibleNodesExpanded() {
+    const nodesWithChildren = allRecords.filter((n) => n.children.length);
+    return nodesWithChildren.length > 0 && nodesWithChildren.every((n) => expandedNodes[n.id] !== false);
+  }
+
+  function updateExpandAllButton() {
+    if (!expandAllBtn) return;
+    expandAllBtn.textContent = areAllCollapsibleNodesExpanded() ? "Tout plier" : "Tout déplier";
+    expandAllBtn.disabled = !hasCollapsibleNodes();
   }
 
   function render() {
@@ -1325,6 +1340,7 @@
       yearsRowEl.innerHTML = monthsRowEl.innerHTML = weeksRowEl.innerHTML = daysRowEl.innerHTML = "";
       currentPeriodEl.textContent = "–";
       taskCountEl.textContent = "";
+      updateExpandAllButton();
       return;
     }
     initColorFieldSelect();
@@ -1332,6 +1348,7 @@
     renderTaskList();
     renderTimeline();
     refreshTableInfo();
+    updateExpandAllButton();
   }
 
   document.querySelectorAll(".zoom-controls .btn").forEach((btn) => {
@@ -1370,12 +1387,8 @@
     saveState();
   });
   expandAllBtn.addEventListener("click", () => {
-    allRecords.forEach((n) => { if (n.children.length) expandedNodes[n.id] = true; });
-    saveState();
-    render();
-  });
-  collapseAllBtn.addEventListener("click", () => {
-    allRecords.forEach((n) => { if (n.children.length) expandedNodes[n.id] = false; });
+    const shouldExpand = !areAllCollapsibleNodesExpanded();
+    allRecords.forEach((n) => { if (n.children.length) expandedNodes[n.id] = shouldExpand; });
     saveState();
     render();
   });
@@ -1386,7 +1399,7 @@
     render();
   });
 
-  if (toggleMappingPanelBtn && mappingPanelEl) {
+  if (toggleMappingPanelBtn && mappingPanelEl && debugPanelEl) {
     toggleMappingPanelBtn.textContent = "Aide mapping";
     mappingPanelEl.innerHTML = `
       <div><strong>Mapping multi-niveau</strong> : mappez au minimum <code>level1Name</code>. Les niveaux 2 et 3 sont optionnels et peuvent aussi être des colonnes <em>Reference List</em>.</div>
@@ -1395,8 +1408,22 @@
       <div>Exemple : Projets → Tâches → Sous-tâches avec <code>level1SourceTableId=Projets</code>, <code>level2SourceTableId=Taches</code>, <code>level3SourceTableId=Sous_taches</code>.</div>
     `;
     toggleMappingPanelBtn.addEventListener("click", () => {
-      if (mappingPanelEl.hasAttribute("hidden")) mappingPanelEl.removeAttribute("hidden");
-      else mappingPanelEl.setAttribute("hidden", "hidden");
+      const shouldShow = mappingPanelEl.hasAttribute("hidden");
+      for (const panel of [debugPanelEl, mappingPanelEl]) {
+        if (shouldShow) panel.removeAttribute("hidden");
+        else panel.setAttribute("hidden", "hidden");
+      }
+      toggleMappingPanelBtn.classList.toggle("active", shouldShow);
+      toggleMappingPanelBtn.textContent = shouldShow ? "Masquer aide" : "Aide mapping";
+    });
+  } else if (toggleMappingPanelBtn) {
+    toggleMappingPanelBtn.addEventListener("click", () => {
+      if (!debugPanelEl) return;
+      const shouldShow = debugPanelEl.hasAttribute("hidden");
+      if (shouldShow) debugPanelEl.removeAttribute("hidden");
+      else debugPanelEl.setAttribute("hidden", "hidden");
+      toggleMappingPanelBtn.classList.toggle("active", shouldShow);
+      toggleMappingPanelBtn.textContent = shouldShow ? "Masquer aide" : "Aide mapping";
     });
   }
 
@@ -1404,6 +1431,7 @@
   toggleDateEditBtn.classList.toggle("active", allowTimelineDateEdit);
   toggleLabelsBtn.textContent = labelsVisible ? "Masquer labels" : "Afficher labels";
   groupChildrenBtn.textContent = compactChildren ? "Niveaux bas : 1 ligne" : "Niveaux bas : multi-lignes";
+  updateExpandAllButton();
   updateZoomButtons();
 
   grist.ready({
