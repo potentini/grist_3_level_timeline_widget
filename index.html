@@ -83,9 +83,34 @@
 
       .mapping-panel .row {
         display: grid;
-        grid-template-columns: 130px minmax(160px, 1fr);
+        grid-template-columns: 150px minmax(180px, 1fr);
         gap: 8px;
         align-items: center;
+      }
+
+      .mapping-level {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .mapping-level legend {
+        padding: 0 5px;
+        font-weight: 800;
+        color: var(--text);
+      }
+
+      .mapping-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .mapping-hint {
+        color: var(--text-muted);
+        font-size: 0.7rem;
       }
 
       .mapping-panel select {
@@ -370,12 +395,14 @@
         z-index: 2;
       }
 
-      .gantt-bar:hover {
+      .gantt-bar:hover,
+      .gantt-zero-duration:hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
       }
 
-      .gantt-bar.parent { opacity: 0.9; }
+      .gantt-bar.parent,
+      .gantt-zero-duration.parent { opacity: 0.9; }
       .gantt-bar.level-1 { height: 20px; border-radius: 10px; }
       .gantt-bar.level-2 { height: 18px; border-radius: 9px; }
       .gantt-bar.level-3 { height: 16px; border-radius: 8px; margin-top: 1px; }
@@ -406,6 +433,19 @@
         white-space: nowrap;
         color: var(--text);
         text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+      }
+
+      .gantt-zero-duration {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        transform: translate(-50%, -50%);
+        transform-origin: center;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+        cursor: default;
+        z-index: 3;
+        border: 2px solid #111827;
+        border-radius: 50%;
       }
 
       .gantt-milestone {
@@ -494,11 +534,11 @@
         position: fixed;
         background: #0f172a;
         color: #fff;
-        padding: 7px 9px;
+        padding: 5px 6px;
         border-radius: 8px;
-        font-size: 0.78rem;
+        font-size: 0.74rem;
         z-index: 1000;
-        max-width: 280px;
+        width: min(270px, calc(100vw - 24px));
         box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
         pointer-events: none;
         opacity: 0;
@@ -508,13 +548,21 @@
 
       .tooltip.visible {
         opacity: 1;
+        pointer-events: auto;
         transform: translateY(0);
       }
 
       .tooltip-title {
         font-weight: 800;
-        margin-bottom: 3px;
+        margin: 0 0 3px;
+        line-height: 1.1;
       }
+
+      .tooltip.editing .tooltip-title {
+        margin-left: 78px;
+      }
+
+      .tooltip-row[hidden] { display: none; }
 
       .tooltip-row {
         display: flex;
@@ -525,14 +573,93 @@
       }
 
       .tooltip-extra {
-        margin-top: 4px;
+        margin-top: 2px;
         font-size: 0.7rem;
       }
 
-      .tooltip-extra div {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
+      .tooltip-save {
+        position: absolute;
+        top: 7px;
+        left: 8px;
+        border: 0;
+        border-radius: 7px;
+        padding: 3px 7px;
+        background: var(--success);
+        color: #fff;
+        font-size: 0.68rem;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .tooltip-save[hidden] { display: none; }
+
+      .tooltip-fields {
+        display: grid;
+        gap: 1px;
+      }
+
+      .tooltip-edit-row {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 74px minmax(0, 1fr);
+        gap: 5px;
+        align-items: center;
+        padding: 1px 3px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        color: inherit;
+        font: inherit;
+        line-height: 1.1;
+        text-align: left;
+      }
+
+      .tooltip-edit-row.editable {
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .tooltip-edit-row.editable:hover,
+      .tooltip-edit-row.editing {
+        border-color: rgba(255, 255, 255, 0.32);
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      .tooltip-edit-row span {
+        color: rgba(255, 255, 255, 0.72);
+        font-weight: 700;
+      }
+
+      .tooltip-edit-row small {
+        display: block;
+        margin-top: 0;
+        color: rgba(255, 255, 255, 0.52);
+        font-size: 0.62rem;
+        font-weight: 600;
+        line-height: 1.15;
+      }
+
+      .tooltip-edit-row strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+
+      .tooltip-edit-row input,
+      .tooltip-edit-row select {
+        min-width: 0;
+        width: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 6px;
+        padding: 1px 4px;
+        background: #fff;
+        color: var(--text);
+        font: inherit;
+      }
+
+      .tooltip-edit-row select[multiple] {
+        min-height: 58px;
       }
 
       .toast-container {
@@ -606,15 +733,11 @@
         <div id="debugPanel" class="debug-panel" hidden>
           <div class="debug-line"><strong>Mapping</strong><span id="mappingInfo">Mapping multi-niveau : en attente…</span></div>
           <div class="debug-line"><strong>Debug</strong><span id="debugStatus">Initialisation…</span></div>
-          <div class="debug-line"><strong>Sync</strong><span id="debugSyncMode">selectedTable.update</span></div>
+          <div class="debug-line"><strong>Sync</strong><span id="debugSyncMode">docApi.applyUserActions</span></div>
           <div class="debug-line"><strong>Dernière action</strong><span id="debugAction">aucune</span></div>
         </div>
         <div id="mappingPanel" class="mapping-panel" hidden>
-          <div class="row"><label for="parentRefColSelect">Colonne parent (enfant)</label><select id="parentRefColSelect"></select></div>
-          <div class="row"><label for="parentTableSelect">Table parent</label><select id="parentTableSelect"></select></div>
-          <div class="row"><label for="parentStartColSelect">Colonne début (parent)</label><select id="parentStartColSelect"></select></div>
-          <div class="row"><label for="parentEndColSelect">Colonne fin (parent)</label><select id="parentEndColSelect"></select></div>
-          <div><button class="btn btn-small" id="resetManualMappingBtn">Réinitialiser mapping manuel</button></div>
+          <div>Chargement du mapping interne…</div>
         </div>
       </div>
 
@@ -628,7 +751,7 @@
         <button class="btn btn-small" id="toggleSidebarBtn">Masquer liste</button>
         <button class="btn btn-small" id="toggleLabelsBtn">Masquer labels</button>
         <button class="btn btn-small" id="groupChildrenBtn">Niveaux bas : multi-lignes</button>
-        <button class="btn btn-small" id="toggleDateEditBtn">Dates: édition bloquée</button>
+        <button class="btn btn-small" id="toggleDateEditBtn">Édition bloquée</button>
         <button class="btn btn-small" id="toggleMappingPanelBtn">Aide mapping</button>
 
         <button class="btn btn-small" id="prevBtn" title="Période précédente">◀</button>
@@ -664,7 +787,7 @@
       <div class="gantt-body">
         <div class="task-list" id="taskList">
           <div class="empty">
-            En attente des données Grist ou du mapping des colonnes…
+            En attente du mapping interne…
           </div>
         </div>
         <div class="timeline-body" id="timelineBody">
